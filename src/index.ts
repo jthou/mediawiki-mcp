@@ -457,6 +457,25 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         }
       },
       {
+        name: "get_pages_wikipedia",
+        description: "Get content of a specific Wikipedia page (no login required)",
+        inputSchema: {
+          type: "object",
+          properties: {
+            title: {
+              type: "string",
+              description: "Page title"
+            },
+            limit: {
+              type: "number",
+              description: "Maximum content length (default: 10000)",
+              default: 10000
+            }
+          },
+          required: ["title"]
+        }
+      },
+      {
         name: "get_page",
         description: "Get content of a specific MediaWiki page",
         inputSchema: {
@@ -578,7 +597,85 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     const toolName = request.params.name;
     logger.info(`CallTool: ${toolName} params: ${JSON.stringify(request.params.arguments || {})}`);
     
-    if (toolName === "search_pages") {
+    if (toolName === "get_pages_wikipedia") {
+      logger.info(`收到 get_pages_wikipedia 工具调用请求: ${JSON.stringify(request.params)}`);
+      
+      try {
+        // 检查参数
+        if (!request.params.arguments) {
+          logger.error(`get_pages_wikipedia 工具调用缺少参数`);
+          return {
+            content: [{
+              type: "text",
+              text: `错误: get_pages_wikipedia 工具调用缺少参数`
+            }]
+          };
+        }
+        
+        const title = String(request.params.arguments?.title || "");
+        const limit = Number(request.params.arguments?.limit) || 10000;
+        
+        logger.info(`处理 get_pages_wikipedia 工具调用: title="${title}", limit=${limit}`);
+        
+        if (!title) {
+          logger.error(`get_pages_wikipedia 工具调用缺少 title 参数`);
+          return {
+            content: [{
+              type: "text",
+              text: `错误: 缺少页面标题参数`
+            }]
+          };
+        }
+        
+        // 获取Wikipedia客户端
+        const client = wikiClients["wikipedia"];
+        logger.info(`使用 wikipedia 客户端获取页面`);
+        
+        logger.info(`开始获取页面 "${title}"`);
+        const fetchedPage = await client.getPage(title);
+        
+        if (!fetchedPage) {
+          logger.info(`页面 "${title}" 在维基百科中未找到`);
+          return {
+            content: [{
+              type: "text",
+              text: `页面 "${title}" 在维基百科中未找到`
+            }]
+          };
+        }
+
+        // 缓存页面
+        pageCache[title] = fetchedPage;
+        logger.info(`成功获取并缓存页面 "${title}"，大小: ${fetchedPage.size} 字节`);
+
+        // 限制内容长度
+        let content = fetchedPage.content || "";
+        if (content.length > limit) {
+          content = content.substring(0, limit) + `\n\n... (内容已截断，完整内容共 ${content.length} 字符)`;
+        }
+
+        // 返回页面内容
+        const response = {
+          content: [{
+            type: "text",
+            text: `页面: ${fetchedPage.title}\n大小: ${fetchedPage.size} 字节\n最后修改: ${fetchedPage.timestamp}\n\n内容:\n${content}`
+          }]
+        };
+        
+        logger.info(`返回 get_pages_wikipedia 响应: ${JSON.stringify(response).substring(0, 100)}...`);
+        return response;
+      } catch (error) {
+        logger.error(`获取维基百科页面失败，错误详情:`, error);
+        logger.error(`错误堆栈: ${error instanceof Error ? error.stack : '无堆栈'}`);
+        return {
+          content: [{
+            type: "text",
+            text: `获取维基百科页面时出错: ${error instanceof Error ? error.message : String(error)}`
+          }]
+        };
+      }
+    }
+    else if (toolName === "search_pages") {
       const query = String(request.params.arguments?.query);
       const limit = Number(request.params.arguments?.limit) || 10;
       const wiki = String(request.params.arguments?.wiki) || "wikipedia";
