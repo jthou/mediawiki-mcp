@@ -20,7 +20,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "0.6.0",
     "dotenv": "^17.2.1",
-    "nodemw": "^0.18.0",
+    "nodemw": "^0.18.1",
     "winston": "^3.17.0"
   },
   "devDependencies": {

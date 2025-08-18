@@ -11,3 +11,30 @@
    - 去掉那些尚未通过验证的工具，仅保留list_wikis这一个工具；
    - 用test_mcp_server.sh去检查，确保list_wikis能正常运行；
    - 删除不需要的文件；
+
+- [ ] 任务3：使用 nodemw 添加 get_page 工具
+   - 安装并引入 nodemw
+   - 在配置中添加认证字段，Wikipedia 不需要登录，Jthou 需要登录
+   - 在 src/index.ts 中定义 MediaWikiClient 并实现 getPage 方法
+   - 在 ListToolsRequestSchema 中添加 get_page 工具定义
+   - 在 CallToolRequestSchema 处理器中添加 get_page 分支
+   - 修改 test_mcp_server.sh 增加 get_page 测试用例，检查 list_wikis 工具不被破坏
+   - 如果获取页面成功：
+     - 在当前目录下创建 .wiki 目录
+     - 以页面标题为文件名创建文件，写入页面内容；若目录已存在，覆盖同名文件
+   - 如果获取页面失败：
+     - 输出错误提示
+     - 不创建 .wiki 目录或文件
+- [ ] 任务3：使用nodemw 添加get_page工具：
+   - 安装并引入 nodemw
+   - 在配置中添加认证字段，Wikipedia不需要登录，jthou 需要登录
+   - 注册 get_page 工具
+   - 在 test_mcp_server.sh 中增加测试用例
+   - 前面的任务1的代码没有被破坏，要在测试用例中检查这个。
+   - 如果获取页面成功
+     - 在当前目录下创建.wiki目录
+     - 以获取的页面名称为文件名来创建文件。比如：get_page工具获取了机器学习页面，那么就在.wiki下面创建一个机器学习的文本文件。
+     - 如果.wiki目录已经存在，直接覆盖原文件即可。
+   - 如果获取页面失败
+     - 报错，并给出错误提示
+     - 不在当前目录下创建 .wiki 目录，也不创建错误提示页面。
