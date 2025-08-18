@@ -1,0 +1,13 @@
+- 前置条件：
+   - 所有的功能都在 src/index.js中实现
+   - test_mcp_server.sh 是唯一的测试脚本，可以被任意修改。
+   - 执行新的任务的时候，要保证旧的功能不被破坏。
+   - 其它的脚本，一律视为临时脚本，在测试成功后可以删除。
+- [x] 任务1：添加list_wikis工具
+  -  创建基本的mcp-server，加上一个list_wikis的tool
+  - 试用test_mcp_server.sh测试，能正确返回wikis列表:
+     - wikipedia.org ✅ 已完成
+- [x] 任务2：清理开发环境，保持干净的开发环境
+   - 去掉那些尚未通过验证的工具，仅保留list_wikis这一个工具；
+   - 用test_mcp_server.sh去检查，确保list_wikis能正常运行；
+   - 删除不需要的文件；
