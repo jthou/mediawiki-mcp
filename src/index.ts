@@ -143,10 +143,12 @@ async function handleGetPage(args: any): Promise<any> {
     const client = new MediaWikiClient(wikiConfigs[wiki]);
     const content = await client.getPage(title);
 
-    // 创建 .jthou_wiki 目录
-    const wikiDir = '.jthou_wiki';
+    // 获取输出目录：优先使用环境变量，然后使用当前工作目录
+    const outputBaseDir = process.env.WIKI_OUTPUT_DIR || process.cwd();
+    const wikiDir = path.join(outputBaseDir, '.jthou_wiki');
+
     if (!fs.existsSync(wikiDir)) {
-      fs.mkdirSync(wikiDir);
+      fs.mkdirSync(wikiDir, { recursive: true });
     }
 
     // 写入页面内容到文件
