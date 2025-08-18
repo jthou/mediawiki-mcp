@@ -12,29 +12,21 @@
    - 用test_mcp_server.sh去检查，确保list_wikis能正常运行；
    - 删除不需要的文件；
 
-- [ ] 任务3：使用 nodemw 添加 get_page 工具
-   - 安装并引入 nodemw
-   - 在配置中添加认证字段，Wikipedia 不需要登录，Jthou 需要登录
-   - 在 src/index.ts 中定义 MediaWikiClient 并实现 getPage 方法
-   - 在 ListToolsRequestSchema 中添加 get_page 工具定义
-   - 在 CallToolRequestSchema 处理器中添加 get_page 分支
-   - 修改 test_mcp_server.sh 增加 get_page 测试用例，检查 list_wikis 工具不被破坏
-   - 如果获取页面成功：
-     - 在当前目录下创建 .wiki 目录
-     - 以页面标题为文件名创建文件，写入页面内容；若目录已存在，覆盖同名文件
-   - 如果获取页面失败：
-     - 输出错误提示
-     - 不创建 .wiki 目录或文件
-- [ ] 任务3：使用nodemw 添加get_page工具：
-   - 安装并引入 nodemw
-   - 在配置中添加认证字段，Wikipedia不需要登录，jthou 需要登录
-   - 注册 get_page 工具
-   - 在 test_mcp_server.sh 中增加测试用例
-   - 前面的任务1的代码没有被破坏，要在测试用例中检查这个。
-   - 如果获取页面成功
-     - 在当前目录下创建.wiki目录
-     - 以获取的页面名称为文件名来创建文件。比如：get_page工具获取了机器学习页面，那么就在.wiki下面创建一个机器学习的文本文件。
-     - 如果.wiki目录已经存在，直接覆盖原文件即可。
-   - 如果获取页面失败
-     - 报错，并给出错误提示
-     - 不在当前目录下创建 .wiki 目录，也不创建错误提示页面。
+- [x] 任务3：使用 nodemw 添加 get_page 工具
+   - ✅ 安装并引入 nodemw
+   - ✅ 在配置中添加认证字段，专注于 Jthou wiki 支持（移除 Wikipedia 支持）
+   - ✅ 在 src/index.ts 中定义 MediaWikiClient 类并实现 login 和 getPage 方法
+   - ✅ 在 ListToolsRequestSchema 中添加 get_page 工具定义
+   - ✅ 重构代码：将处理逻辑拆分为独立函数（handleListWikis, handleGetPage）
+   - ✅ 使用 switch 语句替代 if/else 链，提高代码可扩展性
+   - ✅ 添加命令行参数 -f 支持，允许指定自定义 .env 文件路径
+   - ✅ 集成 dotenv 支持，从环境文件加载配置
+   - ✅ 修改 test_mcp_server.sh 增加 get_page 测试用例，验证 list_wikis 工具不被破坏
+   - ✅ 如果获取页面成功：
+     - 在当前目录下创建 .jthou_wiki 目录（专门用于 Jthou wiki 内容）
+     - 以页面标题为文件名创建 .txt 文件，写入页面内容；若目录已存在，覆盖同名文件
+   - ✅ 如果获取页面失败：
+     - 输出详细错误提示
+     - 不创建目录或文件
+   - ✅ 更新 VS Code MCP 配置，支持 -f 参数
+   - ✅ 完成代码重构，提高可维护性和扩展性
