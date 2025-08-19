@@ -1,8 +1,13 @@
-- 前置条件：
-   - 所有的功能都在 src/index.js中实现
-   - test_mcp_server.sh 是唯一的测试脚本，可以被任意修改。
-   - 执行新的任务的时候，要保证旧的功能不被破坏。
-   - 其它的脚本，一律视为临时脚本，在测试成功后可以删除。
+- **总则，在执行后续任何任务之前，先完成以下操作：**
+   - 当前目录下 ./test 目录是测试脚本目录
+   - 每个任务都有一个测试脚本，位于 ./test 目录下。
+     - 比如，任务1的测试脚本是 ./test/task1.sh
+     - 测试脚本可以是任何脚本，比如 bash, python, js, cjs 等等。
+   - 在执行一个新任务之前，先执行这个任务之前的所有测试脚本，只有在所有测试脚本都通过的情况下，才执行新任务。
+     - 比如，在执行任务4之前，先执行 task1.sh, task2.sh, task3.sh，只有在它们都通过的情况下，才执行任务4。
+   - 在新的 git 分支下执行任务，分支名称为 task1, task2, ...
+   - 新任务执行结束之后，要保留新任务测试脚本。
+   - 在提交代码之前，要回归测试以前的所有脚本。
 - [x] 任务1：添加list_wikis工具
   -  创建基本的mcp-server，加上一个list_wikis的tool
   - 试用test_mcp_server.sh测试，能正确返回wikis列表:
@@ -33,8 +38,10 @@
 - [x] 任务4：试用 nodemw 添加 update_page 工具
    - ✅ 在 src/index.ts 中的 MediaWikiClient 定义 updatePage 方法
    - ✅ 修改 ListToolsRequestSchema，添加 update_page 工具定义
+   - ✅ 创建 test/task4.sh 测试脚本
    - ✅ 测试：
       - ✅ 用工具 get_page 获取 test2 页面
       - ✅ 修改 test2 页面内容
-      - ✅ 用 update_page 工具更新 test2 页面
+      - ✅ 用 update_page 工具更新 test2 页面 (生成修订版本 96401)
       - ✅ 再次用 get_page 获取 test2 页面，验证内容已更新
+   - ✅ 通过完整回归测试 (task1-4 全部通过)

@@ -1,0 +1,89 @@
+== 国家及其首都 == 
+以下是所有国家及其对应的首都城市： 
+
+{{#ask: [[Category:国家]] 
+| ?Name 
+| ?Capital 
+| format=table 
+| headers=show 
+}}
+
+
+
+![26de94783dd9.png](images/2024-10-19/26de94783dd9.png)
+
+:
+[[File:b277458a4a90.png|400px|center]]
+
+
+{{#lst:test2|chapter1}}
+
+==External Content==
+{{#embed:http://www.jthou.com:8000/github/Stanford-CS-229/Markdown/cs229-notes1.md|render}}
+
+==external image==
+{{Eximg|500px|http://www.jthou.com/images/1.JPG}}
+
+==image paste ==
+:[[文件:ClipCapIt-230904-161856.PNG|500px]]
+
+==pdf ==
+<pdf>
+http://www.jthou.com/books/Wei%20Zhi/NodeYu%20ExpressKai%20Fa%20(2472)/NodeYu%20ExpressKai%20Fa%20-%20Wei%20Zhi.pdf
+</pdf>
+
+=map=
+<mapframe text="元山" zoom="8" latitude="39.156" longitude="127.455" width="500" height="500" align="center">
+
+</mapframe>
+
+[[Action status::Open]]
+
+
+
+=others=
+<page src=http://www.jthou.com:8002/dashboard/arrange/1/ width=100% height=800 />
+
+{{pape
+|题目=Show, Attend and Tell - Neural Image Caption Generation with Visual Attention
+|作者=Kelvin Xu, Jimmy Lei Ba, Ryan Kiros, Kyunghyun Cho, Aaron Courville, Ruslan Salakhutdinov, Richard S. Zemel, Yoshua Bengio
+|单位= Universite de Montr ´ eal, ´ † University of Toronto, ∗ CIFAR
+|期刊=
+|会议=
+|分类={{tag|Image Caption Generation}}
+}}
+
+{{#arraysearch:b|white}}
+{{#arraysearch:b|red}}
+use offset
+{{#arraysearch:b|red|0}}
+{{#arraysearch:b|red|2}}
+use preg regular expression match
+{{#arraysearch:b|/low/}}
+{{#arraysearch:b|/LOW/i}} - case insensitive
+{{#arraysearch:b|low}}
+use yes no print option
+{{#arraysearch:b|white|0|yes|no}}
+{{#arraysearch:b|yellow|0|yes|no}}
+
+<ctag about="http://www.amazon.com/gp/product/0596153813"
+      means="http://rdf.freebase.com/ns/en.semantic_technology"
+      label="semantic technology"/>
+
+<ctag means="http://rdf.freebase.com/ns/en.commontag" label="common tag"/>
+
+<page src=http://192.168.99.100:8002/project/view/131/ width=100% height=800 />
+
+
+
+
+{{#arraysize:a}}
+
+{{#if: {{#arraysize:a}} | ''array exists'' | ''array not defined'' }}
+
+<comments />
+
+自定义{{M|标签|标签测试}}
+
+[[Category:Actionable]]
+[[Category:Test/test1]]
