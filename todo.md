@@ -30,3 +30,11 @@
      - 不创建目录或文件
    - ✅ 更新 VS Code MCP 配置，支持 -f 参数
    - ✅ 完成代码重构，提高可维护性和扩展性
+- [x] 任务4：试用 nodemw 添加 update_page 工具
+   - ✅ 在 src/index.ts 中的 MediaWikiClient 定义 updatePage 方法
+   - ✅ 修改 ListToolsRequestSchema，添加 update_page 工具定义
+   - ✅ 测试：
+      - ✅ 用工具 get_page 获取 test2 页面
+      - ✅ 修改 test2 页面内容
+      - ✅ 用 update_page 工具更新 test2 页面
+      - ✅ 再次用 get_page 获取 test2 页面，验证内容已更新
