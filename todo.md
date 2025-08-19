@@ -16,7 +16,6 @@
    - 去掉那些尚未通过验证的工具，仅保留list_wikis这一个工具；
    - 用test_mcp_server.sh去检查，确保list_wikis能正常运行；
    - 删除不需要的文件；
-
 - [x] 任务3：使用 nodemw 添加 get_page 工具
    - ✅ 安装并引入 nodemw
    - ✅ 在配置中添加认证字段，专注于 Jthou wiki 支持（移除 Wikipedia 支持）
@@ -35,7 +34,7 @@
      - 不创建目录或文件
    - ✅ 更新 VS Code MCP 配置，支持 -f 参数
    - ✅ 完成代码重构，提高可维护性和扩展性
-- [x] 任务4：试用 nodemw 添加 update_page 工具
+- [x] 任务4：使用 nodemw 添加 update_page 工具
    - ✅ 在 src/index.ts 中的 MediaWikiClient 定义 updatePage 方法
    - ✅ 修改 ListToolsRequestSchema，添加 update_page 工具定义
    - ✅ 创建 test/task4.sh 测试脚本
@@ -45,3 +44,30 @@
       - ✅ 用 update_page 工具更新 test2 页面 (生成修订版本 96401)
       - ✅ 再次用 get_page 获取 test2 页面，验证内容已更新
    - ✅ 通过完整回归测试 (task1-4 全部通过)
+- [x] 任务5: 使用 nodemw 添加 search_pages 工具
+   - [x] **前置准备**：
+     - [x] 在新的 git 分支 task5 下执行任务
+     - [x] 执行回归测试：运行 task1.sh, task2.sh, task3.sh, task4.sh，确保全部通过
+   - [x] **代码实现**：
+     - [x] 在 MediaWikiClient 类中添加 searchPages 方法
+       - [x] 使用 nodemw 的 search 方法实现搜索功能
+       - [x] 支持参数：query(搜索词), limit(结果数量), namespace(命名空间)
+       - [x] 返回格式化的搜索结果
+     - [x] 在 ListToolsRequestSchema 中添加 search_pages 工具定义
+     - [x] 在主处理逻辑中添加 handleSearchPages 函数
+   - [x] **搜索结果处理**：
+     - [x] 直接在MCP对话中显示搜索结果（不保存文件）
+     - [x] 格式化输出：标题、片段、页面大小等信息
+     - [x] 支持结果数量统计和分页提示
+   - [x] **测试脚本开发**：
+     - [x] 创建 test/task5.sh 测试脚本
+     - [x] 测试用例：
+       - [x] 基础搜索测试：搜索已知存在的页面
+       - [x] 空结果测试：搜索不存在的内容
+       - [x] 参数测试：不同的limit值
+       - [x] 参数验证测试：缺少必要参数的处理
+     - [x] 验证搜索结果在对话中正确显示
+   - [x] **回归测试和提交**：
+     - [x] 执行完整回归测试：task1.sh → task5.sh 全部通过
+     - [x] 验证现有功能未被破坏
+     - [x] 准备提交代码到 task5 分支

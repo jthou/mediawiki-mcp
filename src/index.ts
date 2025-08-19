@@ -169,6 +169,45 @@ class MediaWikiClient {
       });
     });
   }
+
+  async searchPages(query: string, limit: number = 10, namespace: number[] = [0]): Promise<any> {
+    await this.login();
+
+    return new Promise((resolve, reject) => {
+      // 使用 nodemw 的 search 方法
+      this.client.search(query, (err: Error, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          // nodemw search 方法返回的数据结构
+          const searchResults = data || [];
+
+          // 限制结果数量和应用命名空间过滤（如果需要）
+          const filteredResults = searchResults.slice(0, limit);
+
+          const formattedResults = filteredResults.map((item: any) => ({
+            title: item.title || item,
+            snippet: this.cleanSnippet(item.snippet || ''),
+            score: item.score || 0,
+            wordcount: item.wordcount || 0,
+            size: item.size || 0,
+            timestamp: item.timestamp || ''
+          }));
+
+          resolve({
+            results: formattedResults,
+            total: formattedResults.length,
+            query: query,
+            limit: limit,
+            namespace: namespace
+          });
+        }
+      });
+    });
+  } private cleanSnippet(snippet: string): string {
+    // 清理HTML标签和特殊字符
+    return snippet.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
+  }
 }
 
 // 通用 wiki 操作处理函数
@@ -371,7 +410,73 @@ async function handleGetPage(args: any): Promise<any> {
     return {
       content: [{
         type: "text",
-        text: `Error retrieving page "${title}" from ${wiki}: ${error instanceof Error ? error.message : String(error)}`
+      }]
+    };
+  }
+}
+
+async function handleSearchPages(args: any): Promise<any> {
+  const wiki = String(args?.wiki || '');
+  const query = String(args?.query || '');
+  const limit = Number(args?.limit || 10);
+  const namespace = Array.isArray(args?.namespace) ? args.namespace.map(Number) : [0];
+
+  if (!wiki || !query) {
+    throw new Error("Both 'wiki' and 'query' parameters are required");
+  }
+
+  if (!wikiConfigs[wiki]) {
+    throw new Error(`Unknown wiki: ${wiki}`);
+  }
+
+  if (limit <= 0 || limit > 50) {
+    throw new Error("Limit must be between 1 and 50");
+  }
+
+  try {
+    const client = new MediaWikiClient(wikiConfigs[wiki]);
+    const searchResult = await client.searchPages(query, limit, namespace);
+
+    if (searchResult.results.length === 0) {
+      return {
+        content: [{
+          type: "text",
+          text: `No results found for "${query}" in ${wiki} wiki.`
+        }]
+      };
+    }
+
+    // 格式化搜索结果输出
+    let resultText = `Found ${searchResult.total} result(s) for "${query}" in ${wiki} wiki:\n\n`;
+
+    searchResult.results.forEach((result: any, index: number) => {
+      resultText += `${index + 1}. **${result.title}**\n`;
+      if (result.snippet) {
+        resultText += `   ${result.snippet}\n`;
+      }
+      resultText += `   Score: ${result.score}, Size: ${result.size} bytes, Words: ${result.wordcount}\n`;
+      if (result.timestamp) {
+        resultText += `   Last modified: ${new Date(result.timestamp).toLocaleString()}\n`;
+      }
+      resultText += '\n';
+    });
+
+    if (searchResult.total === limit) {
+      resultText += `\nShowing first ${limit} results. Use a larger limit to see more results.`;
+    }
+
+    return {
+      content: [{
+        type: "text",
+        text: resultText
+      }]
+    };
+
+  } catch (error) {
+    return {
+      content: [{
+        type: "text",
+        text: `Error searching in ${wiki}: ${error instanceof Error ? error.message : String(error)}`
       }]
     };
   }
@@ -501,6 +606,40 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["wiki", "title"]
         }
+      },
+      {
+        name: "search_pages",
+        description: "Search for pages in MediaWiki that contain specific terms",
+        inputSchema: {
+          type: "object",
+          properties: {
+            wiki: {
+              type: "string",
+              description: "Wiki instance name",
+              enum: ["Jthou"]
+            },
+            query: {
+              type: "string",
+              description: "Search terms or query"
+            },
+            limit: {
+              type: "number",
+              description: "Maximum number of results to return",
+              default: 10,
+              minimum: 1,
+              maximum: 50
+            },
+            namespace: {
+              type: "array",
+              description: "Namespaces to search (0=main, 1=talk, etc.)",
+              items: {
+                type: "number"
+              },
+              default: [0]
+            }
+          },
+          required: ["wiki", "query"]
+        }
       }
     ]
   };
@@ -526,6 +665,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         ...request.params.arguments,
         action: 'get'
       });
+
+    case "search_pages":
+      return await handleSearchPages(request.params.arguments);
 
     default:
       throw new Error(`Unknown tool: ${toolName}`);
