@@ -13,6 +13,7 @@ import {
 import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as crypto from 'crypto';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -110,6 +111,33 @@ class MediaWikiClient {
         } else {
           resolve(content || '');
         }
+      });
+    });
+  }
+
+  async getPageWithMetadata(title: string): Promise<{ content: string, metadata: any }> {
+    // 先尝试登录（如果需要）
+    await this.login();
+
+    return new Promise((resolve, reject) => {
+      // 先获取页面内容，确保这部分工作
+      this.client.getArticle(title, (err: Error, content: string) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+
+        // 创建最简元数据（版本号 + 时间戳）
+        const metadata = {
+          title: title,
+          retrieved_at: new Date().toISOString(),
+          size: content ? content.length : 0
+        };
+
+        resolve({
+          content: content || '',
+          metadata: metadata
+        });
       });
     });
   }
@@ -324,12 +352,28 @@ async function handleUpdatePage(args: any): Promise<any> {
   const wiki = String(args?.wiki || '');
   const title = String(args?.title || '');
   const content = String(args?.content || '');
+  const fromFile = String(args?.fromFile || '');
   const summary = String(args?.summary || '');
   const mode = String(args?.mode || 'replace') as 'replace' | 'append' | 'prepend';
   const minor = Boolean(args?.minor || false);
+  const conflictResolution = String(args?.conflictResolution || 'detect');
 
-  if (!wiki || !title || !content || !summary) {
-    throw new Error("Parameters 'wiki', 'title', 'content', and 'summary' are required");
+  if (!wiki || !title || !summary) {
+    throw new Error("Parameters 'wiki', 'title', and 'summary' are required");
+  }
+
+  // 确定内容来源：fromFile 优先
+  let finalContent = content;
+  if (fromFile) {
+    try {
+      finalContent = fs.readFileSync(fromFile, 'utf8');
+    } catch (error) {
+      throw new Error(`Failed to read file ${fromFile}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+
+  if (!finalContent) {
+    throw new Error("Either 'content' or 'fromFile' parameter is required");
   }
 
   if (!wikiConfigs[wiki]) {
@@ -342,12 +386,56 @@ async function handleUpdatePage(args: any): Promise<any> {
 
   try {
     const client = new MediaWikiClient(wikiConfigs[wiki]);
-    const result = await client.updatePage(title, content, summary, mode, minor);
+
+    // 如果使用 fromFile，执行冲突检测
+    if (fromFile && conflictResolution === 'detect') {
+      // 获取当前服务器版本
+      const { content: serverContent, metadata: serverMetadata } = await client.getPageWithMetadata(title);
+
+      // 检查是否有元数据文件（本地版本信息）
+      const metadataDir = path.join(path.dirname(fromFile), '.metadata');
+      const metadataFile = path.join(metadataDir, `${title}.json`);
+
+      if (fs.existsSync(metadataFile)) {
+        const localMetadata = JSON.parse(fs.readFileSync(metadataFile, 'utf8'));
+
+        // 简单的冲突检测：比较大小
+        if (serverMetadata.size !== localMetadata.size) {
+          // 生成合并文档和最新远程版本
+          const mergeDir = path.join(path.dirname(fromFile), '.merge');
+          if (!fs.existsSync(mergeDir)) {
+            fs.mkdirSync(mergeDir, { recursive: true });
+          }
+
+          // 保存最新远程版本
+          const remoteFile = path.join(mergeDir, `${title}.remote.txt`);
+          fs.writeFileSync(remoteFile, serverContent, 'utf8');
+
+          // 生成合并文档
+          const mergeFile = path.join(mergeDir, `${title}.merge.txt`);
+          const mergeContent = `<<<<<<< LOCAL (${localMetadata.retrieved_at})\n${finalContent}\n=======\n${serverContent}\n>>>>>>> REMOTE (${serverMetadata.retrieved_at})\n`;
+          fs.writeFileSync(mergeFile, mergeContent, 'utf8');
+
+          return {
+            content: [{
+              type: "text",
+              text: `⚠️ Conflict detected for page "${title}":\n` +
+                `Local metadata size: ${localMetadata.size}, Server size: ${serverMetadata.size}\n` +
+                `Merge document created: ${mergeFile}\n` +
+                `Remote version saved: ${remoteFile}\n` +
+                `Use conflictResolution: "force" to override, or edit the merge document.`
+            }]
+          };
+        }
+      }
+    }
+
+    const result = await client.updatePage(title, finalContent, summary, mode, minor);
 
     return {
       content: [{
         type: "text",
-        text: `Successfully updated page "${title}" on ${wiki} (mode: ${mode}). Revision ID: ${result.newrevid}`
+        text: `Successfully updated page "${title}" on ${wiki} (mode: ${mode})${fromFile ? ` from file ${fromFile}` : ''}. Revision ID: ${result.newrevid}`
       }]
     };
   } catch (error) {
@@ -385,14 +473,19 @@ async function handleGetPage(args: any): Promise<any> {
 
   try {
     const client = new MediaWikiClient(wikiConfigs[wiki]);
-    const content = await client.getPage(title);
+    const { content, metadata } = await client.getPageWithMetadata(title);
 
     // 获取输出目录：优先使用环境变量，然后使用当前工作目录
     const outputBaseDir = process.env.WIKI_OUTPUT_DIR || process.cwd();
     const wikiDir = path.join(outputBaseDir, '.jthou_wiki');
+    const metadataDir = path.join(wikiDir, '.metadata');
 
+    // 创建目录
     if (!fs.existsSync(wikiDir)) {
       fs.mkdirSync(wikiDir, { recursive: true });
+    }
+    if (!fs.existsSync(metadataDir)) {
+      fs.mkdirSync(metadataDir, { recursive: true });
     }
 
     // 写入页面内容到文件
@@ -400,16 +493,22 @@ async function handleGetPage(args: any): Promise<any> {
     const filepath = path.join(wikiDir, filename);
     fs.writeFileSync(filepath, content, 'utf8');
 
+    // 写入元数据文件
+    const metadataFilename = `${title}.json`;
+    const metadataFilepath = path.join(metadataDir, metadataFilename);
+    fs.writeFileSync(metadataFilepath, JSON.stringify(metadata, null, 2), 'utf8');
+
     return {
       content: [{
         type: "text",
-        text: `Successfully retrieved page "${title}" from ${wiki} and saved to ${filepath}`
+        text: `Successfully retrieved page "${title}" from ${wiki} and saved to ${filepath}\nMetadata saved to ${metadataFilepath}`
       }]
     };
   } catch (error) {
     return {
       content: [{
         type: "text",
+        text: `Error retrieving page "${title}" from ${wiki}: ${error instanceof Error ? error.message : String(error)}`
       }]
     };
   }
@@ -568,7 +667,11 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             content: {
               type: "string",
-              description: "New page content"
+              description: "New page content (alternative to fromFile)"
+            },
+            fromFile: {
+              type: "string",
+              description: "Path to file containing new page content (alternative to content)"
             },
             summary: {
               type: "string",
@@ -584,9 +687,15 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
               type: "boolean",
               description: "Mark as minor edit",
               default: false
+            },
+            conflictResolution: {
+              type: "string",
+              description: "How to handle conflicts when using fromFile",
+              enum: ["detect", "force", "merge"],
+              default: "detect"
             }
           },
-          required: ["wiki", "title", "content", "summary"]
+          required: ["wiki", "title", "summary"]
         }
       },
       {
@@ -660,11 +769,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return await handleUpdatePage(request.params.arguments);
 
     case "get_page":
-      // 向后兼容：将 get_page 调用转换为 wiki_operation
-      return await handleWikiOperation({
-        ...request.params.arguments,
-        action: 'get'
-      });
+      // 直接调用 handleGetPage 以支持元数据保存
+      return await handleGetPage(request.params.arguments);
 
     case "search_pages":
       return await handleSearchPages(request.params.arguments);
