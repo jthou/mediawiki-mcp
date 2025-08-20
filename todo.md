@@ -143,3 +143,90 @@
      - [x] 执行完整回归测试：task1.sh → task6.sh 全部通过
      - [x] 验证现有功能未被破坏，向后兼容性良好
      - [x] 准备提交代码到 task6 分支
+- [x] 任务7：添加 upload_file 工具（最小可用版：返回可插入引用）
+  - [x] 前置准备
+    - [x] 在新的 git 分支 task7 下执行任务
+    - [x] 回归 task1~6 全部通过
+    - [x] 确认 test.env 账户具备"上传文件"权限；如需 fromUrl，MediaWiki 已开启相关配置（如 $wgAllowCopyUploads）
+    - [x] 准备测试资源 ./test/fixtures/（small.png、another.png、remote.jpg 等）
+  - [x] 工具定义（ListToolsRequestSchema）
+    - [x] 新增 upload_file 工具；参数：wiki, fromFile|fromUrl（二选一）, title?, comment?
+    - [x] 工具描述明确"仅返回一个可直接粘贴到页面的引用：[[File:XXX]]"
+  - [x] 代码实现（src/index.ts）
+    - [x] MediaWikiClient：getFileInfoMinimal(title)（是否存在、sha1）
+    - [x] MediaWikiClient：uploadFileMinimal(localPath,title,comment)
+    - [x] MediaWikiClient：uploadByUrlMinimal(url,title,comment)（下载→上传→清理）
+    - [x] 处理器 handleUploadFileMinimal：
+      - [x] 标题规范化：补"File:"、清理空格与扩展名大小写
+      - [x] 校验：类型白名单/大小上限/路径安全/URL scheme
+      - [x] 预检：同名且 sha1 相同→跳过；同名不同→自动改名（-yyyyMMdd-HHmmss）
+      - [x] 执行上传；返回 fileRef
+    - [x] 在工具路由中注册 case "upload_file"
+  - [x] 返回契约
+    - [x] 仅返回：fileRef（形如 [[File:FinalTitle]]）
+  - [x] 测试脚本（./test/task7.sh）
+    - [x] case1：fromFile 首次上传 → 返回 [[File:xxx]]
+    - [x] case2：再次上传相同文件 → 返回同一引用（跳过）
+    - [x] case3：同名不同内容 → 自动改名并返回新引用
+    - [x] case4：fromUrl 上传 → 返回引用并清理临时文件
+    - [x] case5：非法类型/超限大小 → 正确报错（不上传）
+  - [x] 文档与配置
+    - [x] 在 todo.md 增加使用示例（JSON-RPC 调用样例）
+    - [x] .gitignore 增加 .jthou_tmp/（下载临时目录）
+  - [x] 回归测试与提交
+    - [x] 运行 task1~7 全部通过
+    - [x] 使用中文提交信息："feat(upload): 新增 upload_file，返回 [[File:...]]"
+
+## 📌 使用示例
+
+### JSON-RPC 调用样例
+
+#### 1. 从本地文件上传
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "tools/call",
+  "params": {
+    "name": "upload_file",
+    "arguments": {
+      "wiki": "Jthou",
+      "fromFile": "/path/to/local/file.png",
+      "comment": "Upload test image"
+    }
+  }
+}
+```
+
+#### 2. 从URL上传
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "tools/call",
+  "params": {
+    "name": "upload_file",
+    "arguments": {
+      "wiki": "Jthou",
+      "fromUrl": "https://example.com/image.jpg",
+      "title": "MyImage.jpg",
+      "comment": "Upload image from URL"
+    }
+  }
+}
+```
+
+#### 3. 响应示例
+```json
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "content": [{
+      "type": "text",
+      "text": "File uploaded successfully: [[File:filename.png]]"
+    }]
+  }
+}
+```
+
