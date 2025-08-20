@@ -146,28 +146,88 @@ class MediaWikiClient {
     // 先尝试登录（如果需要）
     await this.login();
 
-    return new Promise((resolve, reject) => {
-      const callback = (err: Error, result: any) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result);
-        }
-      };
+    // 添加重试机制
+    const maxRetries = 3;
+    let lastError: Error | null = null;
 
-      switch (mode) {
-        case 'append':
-          this.client.append(title, content, summary, callback);
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await new Promise((resolve, reject) => {
+          const callback = (err: Error, result: any) => {
+            if (err) {
+              // 检查是否是token过期错误
+              if (err.message.includes('badtoken') || err.message.includes('Invalid token')) {
+                // 尝试重新登录以刷新token
+                this.isLoggedIn = false;
+                this.login().then(() => {
+                  // 重新尝试操作
+                  const retryCallback = (retryErr: Error, retryResult: any) => {
+                    if (retryErr) {
+                      reject(retryErr);
+                    } else {
+                      resolve(retryResult);
+                    }
+                  };
+                  
+                  switch (mode) {
+                    case 'append':
+                      this.client.append(title, content, summary, retryCallback);
+                      break;
+                    case 'prepend':
+                      this.client.prepend(title, content, summary, retryCallback);
+                      break;
+                    case 'replace':
+                    default:
+                      this.client.edit(title, content, summary, minor, retryCallback);
+                      break;
+                  }
+                }).catch(loginError => {
+                  reject(new Error(`Token refresh failed: ${(loginError as Error).message}`));
+                });
+              } else {
+                reject(err);
+              }
+            } else {
+              resolve(result);
+            }
+          };
+
+          switch (mode) {
+            case 'append':
+              this.client.append(title, content, summary, callback);
+              break;
+            case 'prepend':
+              this.client.prepend(title, content, summary, callback);
+              break;
+            case 'replace':
+            default:
+              this.client.edit(title, content, summary, minor, callback);
+              break;
+          }
+        });
+
+        return result;
+      } catch (error) {
+        lastError = error as Error;
+        console.error(`Update attempt ${attempt} failed:`, error);
+        
+        // 如果是最后一次尝试，或者不是网络错误/token错误，则不重试
+        if (attempt === maxRetries || 
+            (!(error as Error).message.includes('ETIMEDOUT') && 
+             !(error as Error).message.includes('ENOTFOUND') && 
+             !(error as Error).message.includes('ECONNRESET') &&
+             !(error as Error).message.includes('badtoken') && 
+             !(error as Error).message.includes('Invalid token'))) {
           break;
-        case 'prepend':
-          this.client.prepend(title, content, summary, callback);
-          break;
-        case 'replace':
-        default:
-          this.client.edit(title, content, summary, minor, callback);
-          break;
+        }
+        
+        // 等待一段时间再重试
+        await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
       }
-    });
+    }
+    
+    // 所有重试都失败了
+    throw new Error(`Failed to update page after ${maxRetries} attempts. Last error: ${lastError?.message}`);
   }
 
   async deletePage(title: string, reason: string): Promise<any> {
