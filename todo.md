@@ -176,3 +176,35 @@
   - [x] 回归测试与提交
     - [x] 运行 task1~7 全部通过
     - [x] 使用中文提交信息："feat(upload): 新增 upload_file，返回 [[File:...]]"
+- 任务8：添加 upload_from_clipboard 工具（最小可用版：返回可插入引用）
+  - [x] 前置准备
+    - [x] 在新的 git 分支 task8 下执行任务
+    - [x] 回归 task1~7 全部通过
+    - [x] 确认 test.env 账户具备"上传文件"权限，剪贴板支持图片/文件/文本
+    - [x] 准备测试资源 ./test/fixtures/（small.png、another.png、test.txt 等）
+  - [x] 工具定义（ListToolsRequestSchema）
+    - [x] 新增 upload_from_clipboard 工具；参数：wiki, clipboardType, title?, comment?
+    - [x] 工具描述明确"仅返回一个可直接粘贴到页面的引用：[[File:XXX]]"
+  - [x] 代码实现（src/index.ts）
+    - [x] MediaWikiClient：handleUploadFromClipboardMinimal(clipboardType, title, comment)
+    - [x] 支持 clipboardType: image/file/text，自动识别类型
+    - [x] 标题规范化：补"File:"、清理空格与扩展名大小写
+    - [x] 校验：类型白名单/大小上限/路径安全
+    - [x] 预检：同名且 sha1 相同→跳过；同名不同→自动改名（-yyyyMMdd-HHmmss）
+    - [x] 执行上传；返回 fileRef
+    - [x] 在工具路由中注册 case "upload_from_clipboard"
+  - [x] 返回契约
+    - [x] 仅返回：fileRef（形如 [[File:FinalTitle]]）
+  - [x] 测试脚本（./test/task8.sh）
+    - [x] case1：剪贴板图片上传 → 返回 [[File:xxx]]
+    - [x] case2：剪贴板文件上传 → 返回 [[File:xxx]]
+    - [x] case3：剪贴板文本上传（如 txt）→ 返回 [[File:xxx]]
+    - [x] case4：重复上传同内容 → 返回同一引用（跳过）
+    - [x] case5：同名不同内容 → 自动改名并返回新引用
+    - [x] case6：非法类型/超限大小 → 正确报错（不上传）
+  - [x] 文档与配置
+    - [x] 在 todo.md 增加使用示例（JSON-RPC 调用样例）
+    - [x] .gitignore 增加 .jthou_tmp/（下载临时目录）
+  - [x] 回归测试与提交
+    - [x] 运行 task1~8 全部通过
+    - [x] 使用中文提交信息："feat(upload): 新增 upload_from_clipboard，返回 [[File:...]]"

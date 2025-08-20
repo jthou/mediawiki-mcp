@@ -283,6 +283,40 @@ class MediaWikiClient {
       });
     });
   }
+  
+  // 添加从剪贴板数据上传的方法
+  async uploadFromClipboard(clipboardData: string, clipboardType: string, title: string, comment: string): Promise<any> {
+    await this.login();
+    
+    // 根据剪贴板类型确定文件扩展名
+    let extension = '';
+    switch (clipboardType) {
+      case 'image':
+        extension = '.png';
+        break;
+      case 'text':
+        extension = '.txt';
+        break;
+      default:
+        extension = '.bin';
+    }
+    
+    // 如果标题没有提供扩展名，则添加默认扩展名
+    if (title && !path.extname(title)) {
+      title += extension;
+    }
+    
+    return new Promise((resolve, reject) => {
+      // 使用 nodemw 的 upload 方法
+      this.client.upload(title, clipboardData, comment, (err: Error, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data);
+        }
+      });
+    });
+  }
 
   private cleanSnippet(snippet: string): string {
     // 清理HTML标签和特殊字符
@@ -760,6 +794,125 @@ async function handleUploadFile(args: any): Promise<any> {
   }
 }
 
+// 添加从剪贴板上传处理函数
+async function handleUploadFromClipboard(args: any): Promise<any> {
+  const wiki = String(args?.wiki || '');
+  const clipboardType = String(args?.clipboardType || '');
+  const clipboardData = String(args?.clipboardData || '');
+  const title = String(args?.title || '');
+  const comment = String(args?.comment || `Uploaded from clipboard via MediaWiki MCP Server`);
+
+  // 验证参数
+  if (!wiki) {
+    throw new Error("Parameter 'wiki' is required");
+  }
+
+  if (!wikiConfigs[wiki]) {
+    throw new Error(`Unknown wiki: ${wiki}`);
+  }
+
+  if (!clipboardType) {
+    throw new Error("Parameter 'clipboardType' is required");
+  }
+
+  if (!['image', 'file', 'text'].includes(clipboardType)) {
+    throw new Error("clipboardType must be one of: image, file, text");
+  }
+
+  if (!clipboardData) {
+    throw new Error("Parameter 'clipboardData' is required");
+  }
+
+  try {
+    const client = new MediaWikiClient(wikiConfigs[wiki]);
+    
+    // 规范化文件标题
+    let finalTitle = title;
+    if (!finalTitle) {
+      // 如果没有提供标题，生成一个默认标题
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '_').substring(0, 19);
+      finalTitle = `Clipboard_${clipboardType}_${timestamp}`;
+    }
+    
+    // 确保文件标题以"File:"开头
+    if (!finalTitle.startsWith("File:")) {
+      finalTitle = `File:${finalTitle}`;
+    }
+    
+    // 清理文件名（处理空格和扩展名大小写）
+    finalTitle = finalTitle.replace(/\s+/g, '_');
+    
+    // 根据剪贴板类型确定文件扩展名
+    let extension = '';
+    switch (clipboardType) {
+      case 'image':
+        extension = '.png';
+        break;
+      case 'text':
+        extension = '.txt';
+        break;
+      case 'file':
+        // 对于文件类型，如果没有提供扩展名，使用.bin作为默认
+        extension = path.extname(finalTitle) || '.bin';
+        break;
+    }
+    
+    // 如果标题没有提供扩展名，则添加默认扩展名
+    if (!path.extname(finalTitle)) {
+      finalTitle += extension;
+    }
+    
+    // 执行上传
+    const result = await client.uploadFromClipboard(clipboardData, clipboardType, finalTitle, comment);
+    
+    // 检查上传结果
+    if (result && result.result && result.result === "Success") {
+      // 返回文件引用
+      const fileRef = `[[${finalTitle}]]`;
+      return {
+        content: [{
+          type: "text",
+          text: `Successfully uploaded from clipboard. Reference: ${fileRef}`
+        }]
+      };
+    } else {
+      // 上传失败，返回详细错误信息
+      const errorMsg = result && result.error ? result.error.info || JSON.stringify(result.error) : "Unknown error";
+      throw new Error(`Upload failed: ${errorMsg}`);
+    }
+  } catch (error) {
+    // 提供更详细的错误信息
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // 特殊处理权限错误
+    if (errorMessage.includes("readapidenied") || errorMessage.includes("permission")) {
+      return {
+        content: [{
+          type: "text",
+          text: `Permission denied: You don't have permission to upload files to this wiki. Please check your account permissions.`
+        }]
+      };
+    }
+    
+    // 特殊处理网络错误
+    if (errorMessage.includes("HTTP status")) {
+      return {
+        content: [{
+          type: "text",
+          text: `Network error: ${errorMessage}. Please check your network connection.`
+        }]
+      };
+    }
+    
+    return {
+      content: [{
+        type: "text",
+        text: `Error uploading from clipboard: ${errorMessage}`
+      }]
+    };
+  }
+}
+
 // 创建 MCP 服务器实例
 const server = new Server(
   { name: "mediawiki-mcp", version: "0.1.0" },
@@ -960,6 +1113,39 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["wiki"]
         }
+      },
+      {
+        name: "upload_from_clipboard",
+        description: "Upload content from clipboard to MediaWiki and return a direct pasteable reference like [[File:XXX]]",
+        inputSchema: {
+          type: "object",
+          properties: {
+            wiki: {
+              type: "string",
+              description: "Wiki instance name",
+              enum: ["Jthou"]
+            },
+            clipboardType: {
+              type: "string",
+              description: "Type of clipboard content",
+              enum: ["image", "file", "text"]
+            },
+            clipboardData: {
+              type: "string",
+              description: "Base64 encoded clipboard data"
+            },
+            title: {
+              type: "string",
+              description: "File title (if not provided, will be generated automatically)"
+            },
+            comment: {
+              type: "string",
+              description: "Upload comment",
+              default: "Uploaded from clipboard via MediaWiki MCP Server"
+            }
+          },
+          required: ["wiki", "clipboardType", "clipboardData"]
+        }
       }
     ]
   };
@@ -988,6 +1174,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       
     case "upload_file":
       return await handleUploadFile(request.params.arguments);
+      
+    case "upload_from_clipboard":
+      return await handleUploadFromClipboard(request.params.arguments);
 
     default:
       throw new Error(`Unknown tool: ${toolName}`);
