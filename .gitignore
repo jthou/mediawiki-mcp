@@ -6,3 +6,4 @@ mcp-global-config.json
 
 # MediaWiki MCP 生成的数据文件 - 不应该提交到git
 .jthou_wiki/
+.jthou_tmp/

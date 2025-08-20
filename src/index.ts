@@ -53,7 +53,7 @@ const wikiConfigs: {
   }
 };
 
-// MediaWiki 客户端类
+// MediaWiki 客类
 class MediaWikiClient {
   private client: any;
   private config: any;
@@ -232,7 +232,59 @@ class MediaWikiClient {
         }
       });
     });
-  } private cleanSnippet(snippet: string): string {
+  }
+  
+  // 添加文件信息获取方法
+  async getFileInfo(filename: string): Promise<any> {
+    await this.login();
+    
+    return new Promise((resolve, reject) => {
+      this.client.getImageInfo(`File:${filename}`, (err: Error, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data || null);
+        }
+      });
+    });
+  }
+  
+  // 添加文件上传方法（从本地文件）
+  async uploadFile(localPath: string, title: string, comment: string): Promise<any> {
+    await this.login();
+    
+    // 读取文件内容
+    const content = fs.readFileSync(localPath);
+    
+    return new Promise((resolve, reject) => {
+      // 使用 nodemw 的 upload 方法
+      this.client.upload(title, content, comment, (err: Error, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data);
+        }
+      });
+    });
+  }
+  
+  // 添加从URL上传文件的方法
+  async uploadFileFromUrl(url: string, title: string, comment: string): Promise<any> {
+    await this.login();
+    
+    return new Promise((resolve, reject) => {
+      // 使用 nodemw 的 uploadByUrl 方法
+      this.client.uploadByUrl(title, url, comment, (err: Error, data: any) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve(data);
+        }
+      });
+    });
+  }
+
+  private cleanSnippet(snippet: string): string {
     // 清理HTML标签和特殊字符
     return snippet.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
   }
@@ -581,6 +633,133 @@ async function handleSearchPages(args: any): Promise<any> {
   }
 }
 
+// 添加文件上传处理函数
+async function handleUploadFile(args: any): Promise<any> {
+  const wiki = String(args?.wiki || '');
+  const fromFile = String(args?.fromFile || '');
+  const fromUrl = String(args?.fromUrl || '');
+  const title = String(args?.title || '');
+  const comment = String(args?.comment || `Uploaded via MediaWiki MCP Server`);
+
+  // 验证参数
+  if (!wiki) {
+    throw new Error("Parameter 'wiki' is required");
+  }
+
+  if (!wikiConfigs[wiki]) {
+    throw new Error(`Unknown wiki: ${wiki}`);
+  }
+
+  if (!fromFile && !fromUrl) {
+    throw new Error("Either 'fromFile' or 'fromUrl' parameter is required");
+  }
+
+  if (fromFile && fromUrl) {
+    throw new Error("Only one of 'fromFile' or 'fromUrl' can be specified");
+  }
+
+  try {
+    const client = new MediaWikiClient(wikiConfigs[wiki]);
+    
+    // 规范化文件标题
+    let finalTitle = title;
+    if (!finalTitle) {
+      // 如果没有提供标题，从文件路径或URL中提取
+      if (fromFile) {
+        finalTitle = path.basename(fromFile);
+      } else {
+        try {
+          const urlObj = new URL(fromUrl);
+          finalTitle = path.basename(urlObj.pathname);
+        } catch (urlError) {
+          throw new Error(`Invalid URL: ${fromUrl}`);
+        }
+      }
+    }
+    
+    // 确保文件标题以"File:"开头
+    if (!finalTitle.startsWith("File:")) {
+      finalTitle = `File:${finalTitle}`;
+    }
+    
+    // 清理文件名（处理空格和扩展名大小写）
+    finalTitle = finalTitle.replace(/\s+/g, '_');
+    
+    // 执行上传前检查
+    let result: any;
+    if (fromFile) {
+      // 检查文件是否存在
+      if (!fs.existsSync(fromFile)) {
+        throw new Error(`File not found: ${fromFile}`);
+      }
+      
+      // 检查文件类型和大小（简单检查）
+      const fileStats = fs.statSync(fromFile);
+      if (fileStats.size > 10 * 1024 * 1024) { // 10MB限制
+        throw new Error(`File too large: ${fromFile}. Maximum size is 10MB.`);
+      }
+      
+      // 执行文件上传
+      result = await client.uploadFile(fromFile, finalTitle, comment);
+    } else {
+      // URL上传
+      // 简单的URL scheme检查
+      if (!fromUrl.startsWith('http://') && !fromUrl.startsWith('https://')) {
+        throw new Error(`Invalid URL scheme. Only http:// and https:// are supported.`);
+      }
+      
+      // 执行URL上传
+      result = await client.uploadFileFromUrl(fromUrl, finalTitle, comment);
+    }
+    
+    // 检查上传结果
+    if (result && result.result && result.result === "Success") {
+      // 返回文件引用
+      const fileRef = `[[${finalTitle}]]`;
+      return {
+        content: [{
+          type: "text",
+          text: `Successfully uploaded file. Reference: ${fileRef}`
+        }]
+      };
+    } else {
+      // 上传失败，返回详细错误信息
+      const errorMsg = result && result.error ? result.error.info || JSON.stringify(result.error) : "Unknown error";
+      throw new Error(`Upload failed: ${errorMsg}`);
+    }
+  } catch (error) {
+    // 提供更详细的错误信息
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    
+    // 特殊处理权限错误
+    if (errorMessage.includes("readapidenied") || errorMessage.includes("permission")) {
+      return {
+        content: [{
+          type: "text",
+          text: `Permission denied: You don't have permission to upload files to this wiki. Please check your account permissions.`
+        }]
+      };
+    }
+    
+    // 特殊处理网络错误
+    if (errorMessage.includes("HTTP status")) {
+      return {
+        content: [{
+          type: "text",
+          text: `Network error: ${errorMessage}. Please check your network connection or the URL.`
+        }]
+      };
+    }
+    
+    return {
+      content: [{
+        type: "text",
+        text: `Error uploading file: ${errorMessage}`
+      }]
+    };
+  }
+}
+
 // 创建 MCP 服务器实例
 const server = new Server(
   { name: "mediawiki-mcp", version: "0.1.0" },
@@ -749,6 +928,38 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["wiki", "query"]
         }
+      },
+      {
+        name: "upload_file",
+        description: "Upload a file to MediaWiki and return a direct pasteable reference like [[File:XXX]]",
+        inputSchema: {
+          type: "object",
+          properties: {
+            wiki: {
+              type: "string",
+              description: "Wiki instance name",
+              enum: ["Jthou"]
+            },
+            fromFile: {
+              type: "string",
+              description: "Path to local file to upload (mutually exclusive with fromUrl)"
+            },
+            fromUrl: {
+              type: "string",
+              description: "URL of file to upload (mutually exclusive with fromFile)"
+            },
+            title: {
+              type: "string",
+              description: "File title (if not provided, will be derived from filename or URL)"
+            },
+            comment: {
+              type: "string",
+              description: "Upload comment",
+              default: "Uploaded via MediaWiki MCP Server"
+            }
+          },
+          required: ["wiki"]
+        }
       }
     ]
   };
@@ -774,6 +985,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
     case "search_pages":
       return await handleSearchPages(request.params.arguments);
+      
+    case "upload_file":
+      return await handleUploadFile(request.params.arguments);
 
     default:
       throw new Error(`Unknown tool: ${toolName}`);
