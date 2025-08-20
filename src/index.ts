@@ -14,8 +14,6 @@ import { createRequire } from 'module';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as crypto from 'crypto';
-import * as os from 'os';
-import * as https from 'https';
 import { config } from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
@@ -55,7 +53,7 @@ const wikiConfigs: {
   }
 };
 
-// MediaWiki 客类扩展
+// MediaWiki 客户端类
 class MediaWikiClient {
   private client: any;
   private config: any;
@@ -234,61 +232,9 @@ class MediaWikiClient {
         }
       });
     });
-  }
-
-  private cleanSnippet(snippet: string): string {
+  } private cleanSnippet(snippet: string): string {
     // 清理HTML标签和特殊字符
     return snippet.replace(/<[^>]*>/g, '').replace(/&[^;]+;/g, ' ').trim();
-  }
-
-  async getFileInfoMinimal(title: string): Promise<{ exists: boolean; sha1?: string }> {
-    return new Promise((resolve, reject) => {
-      this.client.getFileInfo(title, (err: Error, info: any) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve({
-            exists: !!info,
-            sha1: info?.sha1
-          });
-        }
-      });
-    });
-  }
-
-  async uploadFileMinimal(localPath: string, title: string, comment: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      this.client.upload(localPath, title, comment, (err: Error, result: any) => {
-        if (err) {
-          reject(err);
-        } else {
-          resolve(result.filename);
-        }
-      });
-    });
-  }
-
-  async uploadByUrlMinimal(url: string, title: string, comment: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const tempFilePath = path.join(os.tmpdir(), path.basename(url));
-      const fileStream = fs.createWriteStream(tempFilePath);
-      https.get(url, (response) => {
-        response.pipe(fileStream);
-        fileStream.on('finish', async () => {
-          try {
-            const filename = await this.uploadFileMinimal(tempFilePath, title, comment);
-            fs.unlinkSync(tempFilePath); // 清理临时文件
-            resolve(filename);
-          } catch (error) {
-            fs.unlinkSync(tempFilePath); // 清理临时文件
-            reject(error);
-          }
-        });
-      }).on('error', (err) => {
-        fs.unlinkSync(tempFilePath); // 清理临时文件
-        reject(err);
-      });
-    });
   }
 }
 
@@ -635,87 +581,13 @@ async function handleSearchPages(args: any): Promise<any> {
   }
 }
 
-async function handleUploadFileMinimal(args: any): Promise<any> {
-  const wiki = String(args?.wiki || '');
-  const fromFile = String(args?.fromFile || '');
-  const fromUrl = String(args?.fromUrl || '');
-  const title = String(args?.title || '');
-  const comment = String(args?.comment || '');
-
-  if (!wiki || !(fromFile || fromUrl)) {
-    throw new Error("Parameters 'wiki' and either 'fromFile' or 'fromUrl' are required");
-  }
-
-  if (!wikiConfigs[wiki]) {
-    throw new Error(`Unknown wiki: ${wiki}`);
-  }
-
-  const client = new MediaWikiClient(wikiConfigs[wiki]);
-
-  let finalTitle = title || (fromFile ? path.basename(fromFile) : path.basename(new URL(fromUrl).pathname));
-  // 标题规范化：补"File:"前缀
-  finalTitle = finalTitle.startsWith('File:') ? finalTitle : `File:${finalTitle}`;
-
-  try {
-    // 预检文件信息
-    const fileInfo = await client.getFileInfoMinimal(finalTitle);
-    if (fileInfo.exists) {
-      // 如果文件存在，检查内容是否相同
-      let localSha1 = '';
-      if (fromFile) {
-        // 计算本地文件的SHA1
-        const fileBuffer = fs.readFileSync(fromFile);
-        localSha1 = crypto.createHash('sha1').update(fileBuffer).digest('hex');
-      }
-      
-      // 如果SHA1相同，则跳过上传
-      if (localSha1 && localSha1 === fileInfo.sha1) {
-        return {
-          content: [{
-            type: "text",
-            text: `File already exists with same content: [[${finalTitle}]]`
-          }]
-        };
-      }
-      
-      // 文件存在但不同，自动改名（添加时间戳）
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').replace('T', '-').split('.')[0];
-      const ext = path.extname(finalTitle);
-      const nameWithoutExt = finalTitle.substring(0, finalTitle.length - ext.length);
-      finalTitle = `${nameWithoutExt}-${timestamp}${ext}`;
-    }
-
-    // 执行上传
-    let filename = '';
-    if (fromFile) {
-      filename = await client.uploadFileMinimal(fromFile, finalTitle, comment);
-    } else {
-      filename = await client.uploadByUrlMinimal(fromUrl, finalTitle, comment);
-    }
-
-    return {
-      content: [{
-        type: "text",
-        text: `File uploaded successfully: [[${filename}]]`
-      }]
-    };
-  } catch (error) {
-    return {
-      content: [{
-        type: "text",
-        text: `Error uploading file: ${error instanceof Error ? error.message : String(error)}`
-      }]
-    };
-  }
-}
-
 // 创建 MCP 服务器实例
 const server = new Server(
   { name: "mediawiki-mcp", version: "0.1.0" },
   { capabilities: { tools: { listChanged: true } } }
 );
 
-// 列出可用工具：添加 upload_file
+// 列出可用工具：list_wikis 和 wiki_operation
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
@@ -877,46 +749,12 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
           },
           required: ["wiki", "query"]
         }
-      },
-      {
-        name: "upload_file",
-        description: "Upload a file to MediaWiki and return a reference ([[File:XXX]])",
-        inputSchema: {
-          type: "object",
-          properties: {
-            wiki: {
-              type: "string",
-              description: "Wiki instance name",
-              enum: ["Jthou"]
-            },
-            fromFile: {
-              type: "string",
-              description: "Path to local file"
-            },
-            fromUrl: {
-              type: "string",
-              description: "URL of remote file"
-            },
-            title: {
-              type: "string",
-              description: "Target file title (optional)"
-            },
-            comment: {
-              type: "string",
-              description: "Upload comment"
-            }
-          },
-          oneOf: [
-            { required: ["wiki", "fromFile"] },
-            { required: ["wiki", "fromUrl"] }
-          ]
-        }
       }
     ]
   };
 });
 
-// 工具调用处理：添加 upload_file
+// 工具调用处理：处理 list_wikis, wiki_operation, update_page 和 get_page（向后兼容）
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const toolName = request.params.name;
 
@@ -937,8 +775,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     case "search_pages":
       return await handleSearchPages(request.params.arguments);
 
-    case "upload_file":
-      return await handleUploadFileMinimal(request.params.arguments);
     default:
       throw new Error(`Unknown tool: ${toolName}`);
   }
